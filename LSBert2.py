@@ -293,29 +293,20 @@ def read_eval_index_dataset(data_path, is_label=True):
             if not line:
                 break
             
-            sentence,words = line.strip().split('\t',1)
+            sentence,words, index = line.strip().split('\t',2)
                 #print(sentence)
-            mask_word,labels = words.strip().split('\t',1)
-            label = labels.split('\t')
+            mask_word = words.strip()
                 
             sentences.append(sentence)
             mask_words.append(mask_word)
-                
-            one_labels = []
-            for la in label[1:]:
-                if la not in one_labels:
-                    la_id,la_word = la.split(':')
-                    one_labels.append(la_word)
-                
-                #print(mask_word, " ---",one_labels)
-            mask_labels.append(one_labels)
             
-    return sentences,mask_words,mask_labels
+    return sentences,mask_words,mask_labels, index
 
 def read_eval_dataset(data_path, is_label=True):
     sentences=[]
     mask_words = []
     mask_labels = []
+    indexes = []
     id = 0
 
     with open(data_path, "r", encoding='ISO-8859-1') as reader:
@@ -327,22 +318,12 @@ def read_eval_dataset(data_path, is_label=True):
                     continue
                 if not line:
                     break
-                sentence,words = line.strip().split('\t',1)
-                #print(sentence)
-                mask_word,labels = words.strip().split('\t',1)
-                label = labels.split('\t')
-                
+                sentence,words, index = line.strip().split('\t',2)
+
+                mask_word = words.strip() 
+                indexes.append(index)
                 sentences.append(sentence)
                 mask_words.append(mask_word)
-                
-                one_labels = []
-                for la in label:
-                    if la not in one_labels:
-                        one_labels.append(la)
-                
-                #print(mask_word, " ---",one_labels)
-                    
-                mask_labels.append(one_labels)
             else:
                 if not line:
                     break
@@ -350,7 +331,7 @@ def read_eval_dataset(data_path, is_label=True):
                 sentence,mask_word = line.strip().split('\t')
                 sentences.append(sentence)
                 mask_words.append(mask_word)
-    return sentences,mask_words,mask_labels
+    return sentences,mask_words,mask_labels, indexes
 
 def BERT_candidate_generation(source_word, pre_tokens, pre_scores, ps, num_selection=10):
 
@@ -844,11 +825,10 @@ def main():
      
         fileName = args.eval_dir.split('/')[-1][:-4]
         if fileName=='lex.mturk':
-            eval_examples, mask_words, mask_labels = read_eval_dataset(args.eval_dir)
+            eval_examples, mask_words, mask_labels, indexes = read_eval_dataset(args.eval_dir)
         else:
-            eval_examples, mask_words, mask_labels = read_eval_index_dataset(args.eval_dir)
+            eval_examples, mask_words, mask_labels, indexes = read_eval_index_dataset(args.eval_dir)
 
-       
         eval_size = len(eval_examples)
         print("***** Running evaluation *****")
         print("  Num examples = %d", eval_size)
@@ -869,7 +849,7 @@ def main():
 
             assert len(words)==len(position)
 
-            mask_index = words.index(mask_words[i])
+            mask_index = words.index(mask_words[i].lower(), int(indexes[i]))
 
             mask_context = extract_context(words,mask_index,window_context)
 
@@ -910,29 +890,32 @@ def main():
 
             words_tag = nltk.pos_tag(words)
 
-            complex_word_index = words.index(mask_words[i])
-
+            complex_word_index = words.index(mask_words[i].lower(), int(indexes[i]))
             complex_word_tag = words_tag[complex_word_index][1]
-
-   
 
             complex_word_tag = preprocess_tag(complex_word_tag)
             
-            cgPPDB = ppdb_model.predict(mask_words[i],complex_word_tag)
+            cgPPDB = ppdb_model.predict(mask_words[i].lower(),complex_word_tag)
 
-            cgBERT = BERT_candidate_generation(mask_words[i], pre_tokens, predicted_top[0].cpu().numpy(), ps, args.num_selections)
+            cgBERT = BERT_candidate_generation(mask_words[i].lower(), pre_tokens, predicted_top[0].cpu().numpy(), ps, args.num_selections)
 
             print(cgBERT)
             
             CGBERT.append(cgBERT)
           
-            pre_word = substitution_ranking(mask_words[i], mask_context, cgBERT, fasttext_dico, fasttext_emb,word_count,cgPPDB,tokenizer,model,mask_labels[i])
+            pre_word = substitution_ranking(mask_words[i].lower(), mask_context, cgBERT, fasttext_dico, fasttext_emb,word_count,cgPPDB,tokenizer,model,'')
 
 
             substitution_words.append(pre_word)
 
+            output_sr_file.write(eval_examples[i])
+            output_sr_file.write('\t')
+            output_sr_file.write(mask_words[i])
+            output_sr_file.write('\t')
+            output_sr_file.write(pre_word)
+            output_sr_file.write('\n')
         
-        potential,precision,recall,F_score=evaulation_SS_scores(CGBERT, mask_labels)
+        """ potential,precision,recall,F_score=evaulation_SS_scores(CGBERT, mask_labels)
         print("The score of evaluation for BERT candidate generation")
         print(potential,precision,recall,F_score)
 
@@ -956,7 +939,7 @@ def main():
         output_sr_file.write(str(accuracy))
         output_sr_file.write('\t')
         output_sr_file.write(str(changed_proportion))
-        output_sr_file.write('\n')
+        output_sr_file.write('\n') """
 
         output_sr_file.close()
 
