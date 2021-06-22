@@ -898,12 +898,15 @@ def main():
             cgPPDB = ppdb_model.predict(mask_words[i].lower(),complex_word_tag)
 
             cgBERT = BERT_candidate_generation(mask_words[i].lower(), pre_tokens, predicted_top[0].cpu().numpy(), ps, args.num_selections)
+            possibleWords = []
+            """ We are going to remove the options when the tag is not the same as the word """
+            for x in cgBERT:
+                new_tag = nltk.pos_tag([x])[0][1]
+                if complex_word_tag == new_tag:
+                    possibleWords.append(x)
 
-            print(cgBERT)
-            
-            CGBERT.append(cgBERT)
-          
-            pre_word = substitution_ranking(mask_words[i].lower(), mask_context, cgBERT, fasttext_dico, fasttext_emb,word_count,cgPPDB,tokenizer,model,'')
+
+            pre_word = substitution_ranking(mask_words[i].lower(), mask_context, possibleWords, fasttext_dico, fasttext_emb,word_count,cgPPDB,tokenizer,model,'')
 
 
             substitution_words.append(pre_word)
@@ -913,9 +916,13 @@ def main():
             output_sr_file.write(mask_words[i])
             output_sr_file.write('\t')
             output_sr_file.write(pre_word)
+            output_sr_file.write('\t')
+            output_sr_file.write(str(complex_word_index))
             output_sr_file.write('\n')
         
-        """ potential,precision,recall,F_score=evaulation_SS_scores(CGBERT, mask_labels)
+        """ 
+        CGBERT.append(possibleWords)
+        potential,precision,recall,F_score=evaulation_SS_scores(CGBERT, mask_labels)
         print("The score of evaluation for BERT candidate generation")
         print(potential,precision,recall,F_score)
 
